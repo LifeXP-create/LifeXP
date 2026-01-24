@@ -1,0 +1,8 @@
+{
+  "expo": {
+    "name": "LifeXP",
+    "slug": "lifexp",
+    "plugins": ["expo-router"]
+  }
+}
+
