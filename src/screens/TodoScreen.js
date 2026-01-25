@@ -1,9 +1,16 @@
-import React, { useMemo, useState } from "react";
-import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useMemo, useState } from "react";
+import {
+  FlatList,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import EditRoutineModal from "../components/EditRoutineModal";
 import { useApp } from "../context/AppState";
 import { theme } from "../theme";
-import EditRoutineModal from "../components/EditRoutineModal";
 
 const TABS = [
   { key: "daily", label: "Daily" },
@@ -36,7 +43,9 @@ export default function TodoScreen() {
 
   const list = useMemo(() => {
     if (tab === "bad") return badHabits.map((b) => ({ ...b, _type: "bad" }));
-    return recurring.filter((r) => r.kind === tab).map((r) => ({ ...r, _type: "recurring" }));
+    return recurring
+      .filter((r) => r.kind === tab)
+      .map((r) => ({ ...r, _type: "recurring" }));
   }, [recurring, badHabits, tab]);
 
   function addQuick() {
@@ -82,7 +91,8 @@ export default function TodoScreen() {
           title: t || "",
           area: "Productivity",
           kind: tab, // daily/weekly/monthly/yearly
-          times: tab === "daily" ? 1 : Math.max(1, Math.min(14, Number(times) || 1)),
+          times:
+            tab === "daily" ? 1 : Math.max(1, Math.min(14, Number(times) || 1)),
           note: "",
           weekDays: [],
           monthDays: [],
@@ -165,7 +175,9 @@ export default function TodoScreen() {
 
         <TextInput
           style={s.input}
-          placeholder={tab === "bad" ? "Schlechte Gewohnheit…" : "Neue Routine…"}
+          placeholder={
+            tab === "bad" ? "Schlechte Gewohnheit…" : "Neue Routine…"
+          }
           placeholderTextColor="#6b7280"
           value={title}
           onChangeText={setTitle}
@@ -175,7 +187,9 @@ export default function TodoScreen() {
 
         {tab !== "daily" && tab !== "bad" && (
           <View style={s.times}>
-            <Text style={s.small}>x/{tab === "weekly" ? "W" : tab === "monthly" ? "M" : "Y"}</Text>
+            <Text style={s.small}>
+              x/{tab === "weekly" ? "W" : tab === "monthly" ? "M" : "Y"}
+            </Text>
             <TextInput
               style={s.timesInput}
               keyboardType="number-pad"
@@ -187,7 +201,11 @@ export default function TodoScreen() {
         )}
 
         {/* HIER: Blatt -> Edit. Öffnet Create-Modal */}
-        <TouchableOpacity onPress={openCreateModal} style={s.iconBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+        <TouchableOpacity
+          onPress={openCreateModal}
+          style={s.iconBtn}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
           <Ionicons name="create-outline" size={18} color={theme.text} />
         </TouchableOpacity>
 
@@ -209,7 +227,9 @@ export default function TodoScreen() {
               {item._type === "recurring" && (
                 <Text style={s.meta}>
                   {cap(item.kind)}
-                  {item.kind !== "daily" && item.times ? ` · ${item.times}x` : ""}
+                  {item.kind !== "daily" && item.times
+                    ? ` · ${item.times}x`
+                    : ""}
                   {" · "}
                   {item.area}
                 </Text>
@@ -217,7 +237,8 @@ export default function TodoScreen() {
 
               {item._type === "bad" && (
                 <Text style={s.meta}>
-                  Ziel: abgewöhnen · {item.area} · Intensität {item.intensity ?? 0.2}
+                  Ziel: abgewöhnen · {item.area} · Intensität{" "}
+                  {item.intensity ?? 0.2}
                 </Text>
               )}
 
@@ -233,7 +254,11 @@ export default function TodoScreen() {
             </TouchableOpacity>
 
             <TouchableOpacity
-              onPress={() => (item._type === "bad" ? removeBadHabit(item.id) : removeRecurring(item.id))}
+              onPress={() =>
+                item._type === "bad"
+                  ? removeBadHabit(item.id)
+                  : removeRecurring(item.id)
+              }
               style={s.iconBtn}
             >
               <Ionicons name="trash-outline" size={18} color={theme.sub} />
@@ -243,7 +268,8 @@ export default function TodoScreen() {
       />
 
       <Text style={s.noteFoot}>
-        Jede Routine hat eine optionale „KI-Notiz“. Sie wird später für Analyse/Anpassung genutzt.
+        Jede Routine hat eine optionale „KI-Notiz“. Sie wird später für
+        Analyse/Anpassung genutzt.
       </Text>
 
       <EditRoutineModal
@@ -292,7 +318,12 @@ const s = StyleSheet.create({
   },
   input: { flex: 1, color: theme.text },
 
-  addBtn: { backgroundColor: theme.primary, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
+  addBtn: {
+    backgroundColor: theme.primary,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
   addT: { color: "#001014", fontWeight: "800" },
 
   times: {
