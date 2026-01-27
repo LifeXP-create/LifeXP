@@ -1,6 +1,10 @@
+// src/storage/drivers/localAsync.js
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const K = {
+  // NEU: AppState (dein grosser Save aus AppState.js)
+  state: "lifexp_appstate_v1",
+
   profile: "lifexp_profile_v1",
   quests: "lifexp_quests_v1",
   completions: "lifexp_completions_v1",
@@ -22,9 +26,20 @@ async function write(key, value) {
 }
 
 export function createLocalAsyncDriver({ userId }) {
+  // alles pro userId namespacen (auch wenn lokal)
   const key = (base) => `${base}:${userId}`;
 
   return {
+    // -------- AppState (NEU) --------
+    async getAppState() {
+      return await read(key(K.state), null);
+    },
+    async upsertAppState(state) {
+      await write(key(K.state), state);
+      return state;
+    },
+
+    // -------- PROFILE --------
     async getProfile() {
       return await read(key(K.profile), null);
     },
@@ -33,6 +48,7 @@ export function createLocalAsyncDriver({ userId }) {
       return profile;
     },
 
+    // -------- QUESTS --------
     async listQuests() {
       return await read(key(K.quests), []);
     },
@@ -52,6 +68,7 @@ export function createLocalAsyncDriver({ userId }) {
       );
     },
 
+    // -------- COMPLETIONS --------
     async listCompletions(dateISO) {
       const list = await read(key(K.completions), []);
       return dateISO ? list.filter((c) => c.dateISO === dateISO) : list;
@@ -70,6 +87,7 @@ export function createLocalAsyncDriver({ userId }) {
       );
     },
 
+    // -------- XP --------
     async listXP() {
       return await read(key(K.xp), []);
     },
