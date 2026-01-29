@@ -1,15 +1,26 @@
 // src/context/AppState.js
-import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { generateDailyQuests } from "../lib/ai";
+import { getStorage } from "../storage/typesafeStorage";
 
 export const AREAS = ["Body", "Mind", "Social", "Productivity", "Wellbeing"];
 
-const STORAGE_KEY = "lifequest_state_v2";
 const Ctx = createContext(null);
 export const useApp = () => useContext(Ctx);
 
-const DEFAULT_WEEKLY_GOALS = { Body: 3, Mind: 3, Social: 1, Productivity: 3, Wellbeing: 4 };
+const DEFAULT_WEEKLY_GOALS = {
+  Body: 3,
+  Mind: 3,
+  Social: 1,
+  Productivity: 3,
+  Wellbeing: 4,
+};
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
@@ -122,7 +133,9 @@ function buildEventReminder(ev, dateISO) {
 
 export function AppProvider({ children }) {
   const [profile, setProfile] = useState({ name: "Player", level: 1, xp: 0 });
-  const [areas, setAreas] = useState(AREAS.reduce((a, k) => ({ ...a, [k]: { xp: 0, level: 1 } }), {}));
+  const [areas, setAreas] = useState(
+    AREAS.reduce((a, k) => ({ ...a, [k]: { xp: 0, level: 1 } }), {}),
+  );
 
   const [quests, setQuests] = useState([]);
   const [quickQuests, setQuickQuests] = useState([]); // Erinnerungen
@@ -143,9 +156,16 @@ export function AppProvider({ children }) {
   const [badHabits, setBadHabits] = useState([]);
 
   // Universe
-  const [universe, setUniverse] = useState(AREAS.reduce((o, k) => ({ ...o, [k]: { planets: [] } }), {}));
+  const [universe, setUniverse] = useState(
+    AREAS.reduce((o, k) => ({ ...o, [k]: { planets: [] } }), {}),
+  );
 
-  const [reminder, setReminder] = useState({ enabled: false, hour: 19, minute: 30, id: null });
+  const [reminder, setReminder] = useState({
+    enabled: false,
+    hour: 19,
+    minute: 30,
+    id: null,
+  });
   const [weeklyGoals, setWeeklyGoals] = useState(DEFAULT_WEEKLY_GOALS);
   const [loading, setLoading] = useState(true);
 
@@ -153,10 +173,10 @@ export function AppProvider({ children }) {
   useEffect(() => {
     (async () => {
       try {
-        const raw = await AsyncStorage.getItem(STORAGE_KEY);
-        if (raw) {
-          const s = JSON.parse(raw);
+        const store = await getStorage();
+        const s = await store.getAppState();
 
+        if (s) {
           setProfile(normalizeProfile(s.profile ?? profile));
           setAreas(s.areas ?? areas);
           setQuests(s.quests ?? []);
@@ -166,7 +186,7 @@ export function AppProvider({ children }) {
             s.prefs ?? {
               areaDifficulty: AREAS.reduce((a, k) => ({ ...a, [k]: 2 }), {}),
               bannedTitles: {},
-            }
+            },
           );
           setStreak(s.streak ?? 0);
           setLastReset(s.lastReset ?? null);
@@ -175,10 +195,16 @@ export function AppProvider({ children }) {
           setRecurring(s.recurring ?? []);
           setBadHabits(s.badHabits ?? []);
           setUniverse(s.universe ?? universe);
-          setReminder(s.reminder ?? { enabled: false, hour: 19, minute: 30, id: null });
+          setReminder(
+            s.reminder ?? { enabled: false, hour: 19, minute: 30, id: null },
+          );
           setWeeklyGoals(s.weeklyGoals ?? DEFAULT_WEEKLY_GOALS);
         } else {
-          setQuests(typeof generateDailyQuests === "function" ? generateDailyQuests() : []);
+          setQuests(
+            typeof generateDailyQuests === "function"
+              ? generateDailyQuests()
+              : [],
+          );
           setLastReset(todayISO());
           setQuickQuests([]);
         }
@@ -192,9 +218,10 @@ export function AppProvider({ children }) {
   // ---------- Save ----------
   useEffect(() => {
     if (loading) return;
-    AsyncStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({
+
+    (async () => {
+      const store = await getStorage();
+      await store.upsertAppState({
         profile,
         areas,
         quests,
@@ -210,8 +237,8 @@ export function AppProvider({ children }) {
         universe,
         reminder,
         weeklyGoals,
-      })
-    );
+      });
+    })();
   }, [
     profile,
     areas,
@@ -243,11 +270,15 @@ export function AppProvider({ children }) {
 
     if (lastReset !== t) {
       const prevDay = lastReset;
-      const hadDone = (history?.[prevDay]?.completed ?? 0) > 0 || quests.some((q) => q.done);
+      const hadDone =
+        (history?.[prevDay]?.completed ?? 0) > 0 || quests.some((q) => q.done);
       setStreak((s) => (hadDone ? s + 1 : 0));
 
       setLastReset(t);
-      const base = typeof generateDailyQuests === "function" ? generateDailyQuests(prefs) : [];
+      const base =
+        typeof generateDailyQuests === "function"
+          ? generateDailyQuests(prefs)
+          : [];
       setQuests(base);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -274,8 +305,14 @@ export function AppProvider({ children }) {
     const d = todayISO();
     setHistory((h) => {
       const cur = h[d] ?? { completed: 0, xp: 0, perArea: {} };
-      const perArea = { ...cur.perArea, [areaKey]: (cur.perArea?.[areaKey] ?? 0) + 1 };
-      return { ...h, [d]: { completed: cur.completed + 1, xp: cur.xp + gain, perArea } };
+      const perArea = {
+        ...cur.perArea,
+        [areaKey]: (cur.perArea?.[areaKey] ?? 0) + 1,
+      };
+      return {
+        ...h,
+        [d]: { completed: cur.completed + 1, xp: cur.xp + gain, perArea },
+      };
     });
   }
 
@@ -284,7 +321,9 @@ export function AppProvider({ children }) {
     const q = quests.find((x) => x.id === id);
     if (!q || q.done) return;
 
-    setQuests((prev) => prev.map((x) => (x.id === id ? { ...x, done: true } : x)));
+    setQuests((prev) =>
+      prev.map((x) => (x.id === id ? { ...x, done: true } : x)),
+    );
 
     const gain = 1;
     addXP(gain);
@@ -298,19 +337,28 @@ export function AppProvider({ children }) {
     if (action === "like") {
       setPrefs((p) => ({
         ...p,
-        areaDifficulty: { ...p.areaDifficulty, [q.area]: (p.areaDifficulty[q.area] ?? 2) + 0.2 },
+        areaDifficulty: {
+          ...p.areaDifficulty,
+          [q.area]: (p.areaDifficulty[q.area] ?? 2) + 0.2,
+        },
       }));
       return;
     }
     if (action === "hard") {
       setPrefs((p) => ({
         ...p,
-        areaDifficulty: { ...p.areaDifficulty, [q.area]: (p.areaDifficulty[q.area] ?? 2) - 0.4 },
+        areaDifficulty: {
+          ...p.areaDifficulty,
+          [q.area]: (p.areaDifficulty[q.area] ?? 2) - 0.4,
+        },
       }));
       return;
     }
     if (action === "irrelevant") {
-      setPrefs((p) => ({ ...p, bannedTitles: { ...p.bannedTitles, [q.title]: true } }));
+      setPrefs((p) => ({
+        ...p,
+        bannedTitles: { ...p.bannedTitles, [q.title]: true },
+      }));
       return;
     }
     if (action === "delete") {
@@ -322,7 +370,12 @@ export function AppProvider({ children }) {
   // ---------- Erinnerungen (Quick Quests) ----------
   // WICHTIG: manuell erstellte Erinnerungen: Datum ist "egal" fürs Anzeigen (Filter macht das im UI).
   // Deshalb: origin = "manual", fromEvent = false
-  function addQuickQuest(title, area = "Erinnerung", dueDateISO = null, origin = "manual") {
+  function addQuickQuest(
+    title,
+    area = "Erinnerung",
+    dueDateISO = null,
+    origin = "manual",
+  ) {
     const t = (title ?? "").trim();
     if (!t) return;
 
@@ -350,12 +403,16 @@ export function AppProvider({ children }) {
       list.map((x) => {
         if (x.id !== id) return x;
         const next = { ...x, ...patch };
-        if ("dueDateISO" in patch) next.dueDateISO = isISODate(patch.dueDateISO) ? patch.dueDateISO : null;
+        if ("dueDateISO" in patch)
+          next.dueDateISO = isISODate(patch.dueDateISO)
+            ? patch.dueDateISO
+            : null;
         if ("title" in patch) next.title = String(next.title ?? "").trim();
-        if ("origin" in patch) next.origin = patch.origin === "calendar" ? "calendar" : "manual";
+        if ("origin" in patch)
+          next.origin = patch.origin === "calendar" ? "calendar" : "manual";
         if (!next.title) return x;
         return next;
-      })
+      }),
     );
   }
 
@@ -394,7 +451,8 @@ export function AppProvider({ children }) {
       const doneLog = r.doneLog || {};
 
       if (kind === "daily") {
-        if (!doneLog[dateISO]) out.push({ ...r, _dueKind: "daily", _type: "recurring" });
+        if (!doneLog[dateISO])
+          out.push({ ...r, _dueKind: "daily", _type: "recurring" });
         continue;
       }
 
@@ -403,41 +461,61 @@ export function AppProvider({ children }) {
         if (hasFixedDays) {
           const isToday = r.weekDays.includes(dow);
           const doneToday = !!doneLog[dateISO];
-          if (isToday && !doneToday) out.push({ ...r, _dueKind: "weekly_fixed", _type: "recurring" });
+          if (isToday && !doneToday)
+            out.push({ ...r, _dueKind: "weekly_fixed", _type: "recurring" });
         } else {
           const doneCount = Number(doneLog[wk] || 0);
           if (doneCount < times)
-            out.push({ ...r, _dueKind: "weekly_quota", _type: "recurring", _remaining: times - doneCount });
+            out.push({
+              ...r,
+              _dueKind: "weekly_quota",
+              _type: "recurring",
+              _remaining: times - doneCount,
+            });
         }
         continue;
       }
 
       if (kind === "monthly") {
-        const hasFixedDays = Array.isArray(r.monthDays) && r.monthDays.length > 0;
+        const hasFixedDays =
+          Array.isArray(r.monthDays) && r.monthDays.length > 0;
         const dayOfMonth = Number(dateISO.slice(8, 10));
         if (hasFixedDays) {
           const isToday = r.monthDays.includes(dayOfMonth);
           const doneToday = !!doneLog[dateISO];
-          if (isToday && !doneToday) out.push({ ...r, _dueKind: "monthly_fixed", _type: "recurring" });
+          if (isToday && !doneToday)
+            out.push({ ...r, _dueKind: "monthly_fixed", _type: "recurring" });
         } else {
           const doneCount = Number(doneLog[mk] || 0);
           if (doneCount < times)
-            out.push({ ...r, _dueKind: "monthly_quota", _type: "recurring", _remaining: times - doneCount });
+            out.push({
+              ...r,
+              _dueKind: "monthly_quota",
+              _type: "recurring",
+              _remaining: times - doneCount,
+            });
         }
         continue;
       }
 
       if (kind === "yearly") {
-        const hasFixedDates = Array.isArray(r.yearDates) && r.yearDates.length > 0;
+        const hasFixedDates =
+          Array.isArray(r.yearDates) && r.yearDates.length > 0;
         const md = dateISO.slice(5, 10);
         if (hasFixedDates) {
           const isToday = r.yearDates.includes(md);
           const doneToday = !!doneLog[dateISO];
-          if (isToday && !doneToday) out.push({ ...r, _dueKind: "yearly_fixed", _type: "recurring" });
+          if (isToday && !doneToday)
+            out.push({ ...r, _dueKind: "yearly_fixed", _type: "recurring" });
         } else {
           const doneCount = Number(doneLog[yk] || 0);
           if (doneCount < times)
-            out.push({ ...r, _dueKind: "yearly_quota", _type: "recurring", _remaining: times - doneCount });
+            out.push({
+              ...r,
+              _dueKind: "yearly_quota",
+              _type: "recurring",
+              _remaining: times - doneCount,
+            });
         }
         continue;
       }
@@ -451,7 +529,9 @@ export function AppProvider({ children }) {
 
       const k = clampInt(b.intensity ?? 2, 1, 7);
       const seed = `${wk}::${b.id}`;
-      const days = shuffleStable([0, 1, 2, 3, 4, 5, 6], seed).slice(0, k).sort((a, c) => a - c);
+      const days = shuffleStable([0, 1, 2, 3, 4, 5, 6], seed)
+        .slice(0, k)
+        .sort((a, c) => a - c);
 
       if (days.includes(dow)) {
         out.push({
@@ -488,15 +568,18 @@ export function AppProvider({ children }) {
         if (kind === "daily") {
           doneLog[dateISO] = true;
         } else if (kind === "weekly") {
-          const hasFixedDays = Array.isArray(x.weekDays) && x.weekDays.length > 0;
+          const hasFixedDays =
+            Array.isArray(x.weekDays) && x.weekDays.length > 0;
           if (hasFixedDays) doneLog[dateISO] = true;
           else doneLog[wk] = Math.min(times, Number(doneLog[wk] || 0) + 1);
         } else if (kind === "monthly") {
-          const hasFixedDays = Array.isArray(x.monthDays) && x.monthDays.length > 0;
+          const hasFixedDays =
+            Array.isArray(x.monthDays) && x.monthDays.length > 0;
           if (hasFixedDays) doneLog[dateISO] = true;
           else doneLog[mk] = Math.min(times, Number(doneLog[mk] || 0) + 1);
         } else if (kind === "yearly") {
-          const hasFixedDates = Array.isArray(x.yearDates) && x.yearDates.length > 0;
+          const hasFixedDates =
+            Array.isArray(x.yearDates) && x.yearDates.length > 0;
           if (hasFixedDates) doneLog[dateISO] = true;
           else doneLog[yk] = Math.min(times, Number(doneLog[yk] || 0) + 1);
         } else {
@@ -504,7 +587,7 @@ export function AppProvider({ children }) {
         }
 
         return { ...x, doneLog };
-      })
+      }),
     );
 
     const gain = 1;
@@ -523,7 +606,7 @@ export function AppProvider({ children }) {
         const doneLog = { ...(x.doneLog || {}) };
         doneLog[dateISO] = true;
         return { ...x, doneLog };
-      })
+      }),
     );
 
     const gain = 1;
@@ -551,15 +634,41 @@ export function AppProvider({ children }) {
   }
 
   // ---------- Recurring CRUD ----------
-  function addRecurring({ title, kind, times = 1, area = "Productivity", weekDays, monthDays, yearDates, note, difficulty }) {
+  function addRecurring({
+    title,
+    kind,
+    times = 1,
+    area = "Productivity",
+    weekDays,
+    monthDays,
+    yearDates,
+    note,
+    difficulty,
+  }) {
     setRecurring((p) => [
       ...p,
-      { id: `r${Date.now()}`, title, kind, times, area, difficulty, weekDays, monthDays, yearDates, note, doneLog: {} },
+      {
+        id: `r${Date.now()}`,
+        title,
+        kind,
+        times,
+        area,
+        difficulty,
+        weekDays,
+        monthDays,
+        yearDates,
+        note,
+        doneLog: {},
+      },
     ]);
   }
 
   function updateRecurring(id, patch) {
-    setRecurring((list) => list.map((x) => (x.id === id ? sanitizeRecurring({ ...x, ...patch }) : x)));
+    setRecurring((list) =>
+      list.map((x) =>
+        x.id === id ? sanitizeRecurring({ ...x, ...patch }) : x,
+      ),
+    );
   }
 
   function removeRecurring(id) {
@@ -568,22 +677,39 @@ export function AppProvider({ children }) {
 
   function sanitizeRecurring(r) {
     const t = Math.max(1, Math.min(14, Number(r.times || 1)));
-    const k = ["daily", "weekly", "monthly", "yearly"].includes(r.kind) ? r.kind : "weekly";
+    const k = ["daily", "weekly", "monthly", "yearly"].includes(r.kind)
+      ? r.kind
+      : "weekly";
     const a = AREAS.includes(r.area) ? r.area : "Productivity";
 
     const weekDays2 = Array.isArray(r.weekDays)
-      ? [...new Set(r.weekDays.map((n) => Number(n)).filter((n) => n >= 0 && n <= 6))]
+      ? [
+          ...new Set(
+            r.weekDays.map((n) => Number(n)).filter((n) => n >= 0 && n <= 6),
+          ),
+        ]
       : undefined;
 
     const monthDays2 = Array.isArray(r.monthDays)
-      ? [...new Set(r.monthDays.map((n) => Number(n)).filter((n) => n >= 1 && n <= 31))]
+      ? [
+          ...new Set(
+            r.monthDays.map((n) => Number(n)).filter((n) => n >= 1 && n <= 31),
+          ),
+        ]
       : undefined;
 
     const yearDates2 = Array.isArray(r.yearDates)
-      ? [...new Set(r.yearDates.map(String).filter((v) => /^\d{2}-\d{2}$/.test(v)))]
+      ? [
+          ...new Set(
+            r.yearDates.map(String).filter((v) => /^\d{2}-\d{2}$/.test(v)),
+          ),
+        ]
       : undefined;
 
-    const note2 = typeof r.note === "string" && r.note.trim() ? r.note.trim().slice(0, 1000) : undefined;
+    const note2 =
+      typeof r.note === "string" && r.note.trim()
+        ? r.note.trim().slice(0, 1000)
+        : undefined;
 
     return {
       ...r,
@@ -603,13 +729,28 @@ export function AppProvider({ children }) {
     const t = (title ?? "").trim();
     if (!t) return;
     const k = clampInt(intensity, 1, 7);
-    const note2 = typeof note === "string" && note.trim() ? note.trim().slice(0, 1000) : undefined;
+    const note2 =
+      typeof note === "string" && note.trim()
+        ? note.trim().slice(0, 1000)
+        : undefined;
 
-    setBadHabits((p) => [...p, { id: `b${Date.now()}`, title: t, area, intensity: k, note: note2, doneLog: {} }]);
+    setBadHabits((p) => [
+      ...p,
+      {
+        id: `b${Date.now()}`,
+        title: t,
+        area,
+        intensity: k,
+        note: note2,
+        doneLog: {},
+      },
+    ]);
   }
 
   function updateBadHabit(id, patch) {
-    setBadHabits((list) => list.map((x) => (x.id === id ? sanitizeBadHabit({ ...x, ...patch }) : x)));
+    setBadHabits((list) =>
+      list.map((x) => (x.id === id ? sanitizeBadHabit({ ...x, ...patch }) : x)),
+    );
   }
 
   function removeBadHabit(id) {
@@ -621,8 +762,18 @@ export function AppProvider({ children }) {
     if (!t) return b;
     const a = AREAS.includes(b.area) ? b.area : "Wellbeing";
     const k = clampInt(b.intensity ?? 2, 1, 7);
-    const note2 = typeof b.note === "string" && b.note.trim() ? b.note.trim().slice(0, 1000) : undefined;
-    return { ...b, title: t, area: a, intensity: k, note: note2, doneLog: b.doneLog || {} };
+    const note2 =
+      typeof b.note === "string" && b.note.trim()
+        ? b.note.trim().slice(0, 1000)
+        : undefined;
+    return {
+      ...b,
+      title: t,
+      area: a,
+      intensity: k,
+      note: note2,
+      doneLog: b.doneLog || {},
+    };
   }
 
   // ---------- Events -> Erinnerungen (statt Daily Quests) ----------
@@ -638,7 +789,9 @@ export function AppProvider({ children }) {
   }
 
   function removeEventReminderByEventId(evId) {
-    setQuickQuests((list) => list.filter((x) => !(x.fromEvent && x.eventId === evId)));
+    setQuickQuests((list) =>
+      list.filter((x) => !(x.fromEvent && x.eventId === evId)),
+    );
   }
 
   function addEvent({ title, dateISO, start, end, location, note }) {
@@ -647,7 +800,9 @@ export function AppProvider({ children }) {
 
     setEvents((prev) => {
       const list = [...(prev[dISO] || []), ev];
-      list.sort((a, b) => String(a.start || "").localeCompare(String(b.start || "")));
+      list.sort((a, b) =>
+        String(a.start || "").localeCompare(String(b.start || "")),
+      );
       return { ...prev, [dISO]: list };
     });
 
@@ -665,7 +820,9 @@ export function AppProvider({ children }) {
         updatedEv = { ...ev, ...patch, id };
         return updatedEv;
       });
-      list.sort((a, b) => String(a.start || "").localeCompare(String(b.start || "")));
+      list.sort((a, b) =>
+        String(a.start || "").localeCompare(String(b.start || "")),
+      );
       return { ...prev, [dISO]: list };
     });
 
@@ -686,7 +843,9 @@ export function AppProvider({ children }) {
       movedEv = { ...ev, ...patch, id };
 
       const newList = [...(prev[newD] || []), movedEv];
-      newList.sort((a, b) => String(a.start || "").localeCompare(String(b.start || "")));
+      newList.sort((a, b) =>
+        String(a.start || "").localeCompare(String(b.start || "")),
+      );
 
       return { ...prev, [oldD]: restOld, [newD]: newList };
     });
@@ -708,7 +867,10 @@ export function AppProvider({ children }) {
   // ---------- Universe ----------
   function addPlanet(area, { name, size = 1, rarity = "common" }) {
     setUniverse((u) => {
-      const list = [...(u[area]?.planets || []), { id: `p${Date.now()}`, name, size, rarity }];
+      const list = [
+        ...(u[area]?.planets || []),
+        { id: `p${Date.now()}`, name, size, rarity },
+      ];
       return { ...u, [area]: { planets: list } };
     });
   }
@@ -722,12 +884,16 @@ export function AppProvider({ children }) {
   function resetDay() {
     const t = todayISO();
     const prevDay = lastReset || t;
-    const hadDone = (history?.[prevDay]?.completed ?? 0) > 0 || quests.some((q) => q.done);
+    const hadDone =
+      (history?.[prevDay]?.completed ?? 0) > 0 || quests.some((q) => q.done);
     setStreak((s) => (prevDay !== t ? (hadDone ? s + 1 : 0) : s));
 
     setLastReset(t);
 
-    const base = typeof generateDailyQuests === "function" ? generateDailyQuests(prefs) : [];
+    const base =
+      typeof generateDailyQuests === "function"
+        ? generateDailyQuests(prefs)
+        : [];
     setQuests(base);
   }
 
@@ -814,7 +980,7 @@ export function AppProvider({ children }) {
       universe,
       weeklyGoals,
       reminder,
-    ]
+    ],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
