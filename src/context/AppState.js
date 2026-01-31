@@ -1,11 +1,5 @@
 // src/context/AppState.js
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { generateDailyQuests } from "../lib/ai";
 import { getStorage } from "../storage/typesafeStorage";
 
@@ -23,6 +17,88 @@ const DEFAULT_WEEKLY_GOALS = {
 };
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
+
+// ------------------ AI daily quests via backend ------------------
+const API_BASE = process.env.EXPO_PUBLIC_API_BASE;
+
+async function fetchAIDailyQuests({ profile, prefs, history, areas, dateISO }) {
+  const base = String(API_BASE || "").replace(/\/$/, "");
+  if (!base) throw new Error("EXPO_PUBLIC_API_BASE fehlt.");
+
+  // Kompakter Kontext. Nicht alles mitgeben, sonst teuer und langsam.
+  const last7 = summarizeHistory(history, 7);
+
+  const res = await fetch(`${base}/api/daily-quests`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      dateISO,
+      profile: {
+        name: profile?.name || "Player",
+        age: profile?.age ?? null,
+        gender: profile?.gender ?? null,
+        email: profile?.email ?? null,
+        // optional: goals/interests/personality/others falls du sie in profile speicherst
+        goals: profile?.goals ?? [],
+        interests: profile?.interests ?? [],
+        personality: profile?.personality ?? [],
+        others: profile?.others ?? [],
+        level: profile?.level ?? 1,
+        xp: profile?.xp ?? 0,
+      },
+      prefs: {
+        areaDifficulty: prefs?.areaDifficulty ?? {},
+        bannedTitles: prefs?.bannedTitles ?? {},
+      },
+      areas: areas ?? {},
+      history: last7,
+    }),
+  });
+
+  if (!res.ok) {
+    const txt = await res.text().catch(() => "");
+    throw new Error(`daily-quests backend error: ${res.status} ${txt}`);
+  }
+
+  const json = await res.json();
+
+  // Erwartet: { quests: [{ id,title,area,difficulty,done }] }
+  const quests = Array.isArray(json?.quests) ? json.quests : [];
+
+  // Basic sanitize
+  const cleaned = quests
+    .map((q, i) => ({
+      id: String(q?.id || `ai_${dateISO}_${i}`),
+      title: String(q?.title || "").trim(),
+      area: AREAS.includes(q?.area) ? q.area : "Productivity",
+      difficulty: clampInt(q?.difficulty ?? 2, 1, 3),
+      done: false,
+      origin: "ai",
+      dateISO,
+    }))
+    .filter((q) => q.title);
+
+  if (!cleaned.length) throw new Error("AI returned no quests");
+
+  return cleaned;
+}
+
+function summarizeHistory(history = {}, days = 7) {
+  const out = [];
+  const keys = Object.keys(history || {}).sort(); // ISO sort
+  const last = keys.slice(-days);
+
+  for (const k of last) {
+    const h = history?.[k] || {};
+    out.push({
+      dateISO: k,
+      completed: Number(h.completed || 0),
+      xp: Number(h.xp || 0),
+      perArea: h.perArea || {},
+    });
+  }
+  return out;
+}
 
 // XP curve (GERADE)
 export function requiredXPForLevel(level) {
@@ -105,7 +181,6 @@ function eventReminderId(evId) {
   return `evq_${evId}`;
 }
 function buildEventReminder(ev, dateISO) {
-  // Zeit sichtbar -> Prefix "HH:MM "
   const time = (ev?.start || "").trim();
   const baseTitle = String(ev?.title || "").trim();
   const title = `${time ? `${time} ` : ""}${baseTitle}`.trim();
@@ -117,12 +192,10 @@ function buildEventReminder(ev, dateISO) {
     createdAt: new Date().toISOString(),
     dueDateISO: isISODate(dateISO) ? dateISO : null,
 
-    // Kennzeichnung: Kalender-Erinnerung
     origin: "calendar",
     fromEvent: true,
     eventId: ev.id,
 
-    // optional
     time: time || undefined,
     start: ev.start,
     end: ev.end,
@@ -152,7 +225,7 @@ export function AppProvider({ children }) {
   const [events, setEvents] = useState({});
   const [recurring, setRecurring] = useState([]);
 
-  // Anti-Gewohnheiten (intensity 1..7 = x pro Woche)
+  // Anti-Gewohnheiten
   const [badHabits, setBadHabits] = useState([]);
 
   // Universe
@@ -168,6 +241,9 @@ export function AppProvider({ children }) {
   });
   const [weeklyGoals, setWeeklyGoals] = useState(DEFAULT_WEEKLY_GOALS);
   const [loading, setLoading] = useState(true);
+
+  // Track, ob wir für den heutigen Tag schon AI-Quests geholt haben
+  const [dailyQuestDate, setDailyQuestDate] = useState(null);
 
   // ---------- Load ----------
   useEffect(() => {
@@ -199,13 +275,18 @@ export function AppProvider({ children }) {
             s.reminder ?? { enabled: false, hour: 19, minute: 30, id: null },
           );
           setWeeklyGoals(s.weeklyGoals ?? DEFAULT_WEEKLY_GOALS);
+
+          // neu
+          setDailyQuestDate(s.dailyQuestDate ?? null);
         } else {
+          // Erststart
           setQuests(
             typeof generateDailyQuests === "function"
               ? generateDailyQuests()
               : [],
           );
           setLastReset(todayISO());
+          setDailyQuestDate(null);
           setQuickQuests([]);
         }
       } finally {
@@ -237,6 +318,9 @@ export function AppProvider({ children }) {
         universe,
         reminder,
         weeklyGoals,
+
+        // neu
+        dailyQuestDate,
       });
     })();
   }, [
@@ -255,16 +339,49 @@ export function AppProvider({ children }) {
     universe,
     reminder,
     weeklyGoals,
+    dailyQuestDate,
     loading,
   ]);
 
-  // ---------- Daily reset (NUR daily quests; Events NICHT mehr als Quests) ----------
+  // ---------- Ensure daily quests (AI first, fallback local) ----------
+  async function ensureDailyQuestsForToday() {
+    const t = todayISO();
+
+    // Wenn schon korrekt für heute vorhanden, nichts tun.
+    if (dailyQuestDate === t && Array.isArray(quests) && quests.length) return;
+
+    try {
+      // AI holen (Backend)
+      const ai = await fetchAIDailyQuests({
+        profile,
+        prefs,
+        history,
+        areas,
+        dateISO: t,
+      });
+      setQuests(ai);
+      setDailyQuestDate(t);
+    } catch (e) {
+      // Fallback: lokal generieren
+      const base =
+        typeof generateDailyQuests === "function"
+          ? generateDailyQuests(prefs)
+          : [];
+      setQuests(base);
+      setDailyQuestDate(t);
+      console.log("daily quests fallback:", String(e?.message || e));
+    }
+  }
+
+  // ---------- Daily reset ----------
   useEffect(() => {
     if (loading) return;
 
     const t = todayISO();
     if (!lastReset) {
       setLastReset(t);
+      // beim ersten Mal direkt sicherstellen
+      ensureDailyQuestsForToday();
       return;
     }
 
@@ -275,11 +392,12 @@ export function AppProvider({ children }) {
       setStreak((s) => (hadDone ? s + 1 : 0));
 
       setLastReset(t);
-      const base =
-        typeof generateDailyQuests === "function"
-          ? generateDailyQuests(prefs)
-          : [];
-      setQuests(base);
+
+      // NEU: statt immer local -> AI (Fallback local)
+      ensureDailyQuestsForToday();
+    } else {
+      // gleicher Tag: falls leer oder Datum passt nicht -> sicherstellen
+      ensureDailyQuestsForToday();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, lastReset]);
@@ -368,8 +486,6 @@ export function AppProvider({ children }) {
   }
 
   // ---------- Erinnerungen (Quick Quests) ----------
-  // WICHTIG: manuell erstellte Erinnerungen: Datum ist "egal" fürs Anzeigen (Filter macht das im UI).
-  // Deshalb: origin = "manual", fromEvent = false
   function addQuickQuest(
     title,
     area = "Erinnerung",
@@ -389,7 +505,6 @@ export function AppProvider({ children }) {
         area: area || "Erinnerung",
         createdAt: new Date().toISOString(),
         dueDateISO: due,
-
         origin: org,
         fromEvent: false,
         eventId: null,
@@ -434,7 +549,7 @@ export function AppProvider({ children }) {
     removeQuickQuest(id);
   }
 
-  // ---------- Routinen (recurring) + Anti-Gewohnheiten (badHabits) ----------
+  // ---------- Routinen + Anti-Gewohnheiten ----------
   function getDueRecurringForDate(dateISO) {
     const wk = isoWeekKey(dateISO);
     const mk = monthKey(dateISO);
@@ -443,7 +558,6 @@ export function AppProvider({ children }) {
 
     const out = [];
 
-    // ---- recurring ----
     for (const r of recurring) {
       if (!r || !r.id) continue;
       const kind = r.kind || "weekly";
@@ -521,7 +635,6 @@ export function AppProvider({ children }) {
       }
     }
 
-    // ---- badHabits (Anti-Gewohnheiten) ----
     for (const b of badHabits) {
       if (!b || !b.id) continue;
       const doneLog = b.doneLog || {};
@@ -776,7 +889,7 @@ export function AppProvider({ children }) {
     };
   }
 
-  // ---------- Events -> Erinnerungen (statt Daily Quests) ----------
+  // ---------- Events ----------
   function upsertEventReminder(ev, dateISO) {
     const reminderObj = buildEventReminder(ev, dateISO);
     setQuickQuests((list) => {
@@ -890,11 +1003,8 @@ export function AppProvider({ children }) {
 
     setLastReset(t);
 
-    const base =
-      typeof generateDailyQuests === "function"
-        ? generateDailyQuests(prefs)
-        : [];
-    setQuests(base);
+    // NEU: AI daily quests (Fallback local)
+    ensureDailyQuestsForToday();
   }
 
   const value = useMemo(
@@ -962,6 +1072,9 @@ export function AppProvider({ children }) {
       removePlanet,
 
       resetDay,
+
+      // optional für Debug / manuell neu holen:
+      ensureDailyQuestsForToday,
     }),
     [
       loading,
