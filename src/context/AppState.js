@@ -1,6 +1,11 @@
 // src/context/AppState.js
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
-import { generateDailyQuests } from "../lib/ai";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { fetchDailyQuests } from "../lib/dailyQuestClient";
 import { getStorage } from "../storage/typesafeStorage";
 
@@ -144,51 +149,50 @@ function buildEventReminder(ev, dateISO) {
   };
 }
 
-// ---------- AI daily quests fetcher ----------
-async function fetchDailyQuestsOrFallback({
-  dateISO,
-  profile,
-  prefs,
-  history,
-}) {
-  try {
-    const historySummary = buildHistorySummary(history, 7);
+// ---------- STRICT: Daily quests NUR aus Backend ----------
+async function fetchDailyQuestsStrict({ dateISO, profile, prefs, history }) {
+  const historySummary = buildHistorySummary(history, 7);
 
-    const payloadProfile = {
-      name: profile?.name || "Player",
-      email: profile?.email || "",
-      age: profile?.age ?? null,
-      gender: profile?.gender || "",
-      goals: Array.isArray(profile?.goals) ? profile.goals : [],
-      interests: Array.isArray(profile?.interests) ? profile.interests : [],
-      personality: Array.isArray(profile?.personality)
-        ? profile.personality
-        : [],
-      others: Array.isArray(profile?.others) ? profile.others : [],
-    };
+  const payloadProfile = {
+    name: profile?.name || "Player",
+    email: profile?.email || "",
+    age: profile?.age ?? null,
+    gender: profile?.gender || "",
+    goals: Array.isArray(profile?.goals) ? profile.goals : [],
+    interests: Array.isArray(profile?.interests) ? profile.interests : [],
+    personality: Array.isArray(profile?.personality) ? profile.personality : [],
+    others: Array.isArray(profile?.others) ? profile.others : [],
+  };
 
-    const remote = await fetchDailyQuests({
-      profile: payloadProfile,
-      prefs,
-      historySummary,
-      dateISO,
-    });
+  const remote = await fetchDailyQuests({
+    profile: payloadProfile,
+    prefs,
+    historySummary,
+    dateISO,
+  });
 
-    if (Array.isArray(remote?.quests) && remote.quests.length === 5) {
-      return remote.quests.map((q) => ({
-        id: String(
-          q.id || `q_${dateISO}_${Math.random().toString(16).slice(2)}`,
-        ),
-        title: String(q.title || "").trim(),
-        area: AREAS.includes(q.area) ? q.area : "Productivity",
-        done: false,
-      }));
-    }
-  } catch {}
+  if (!Array.isArray(remote?.quests)) {
+    throw new Error("Backend returned no quests array");
+  }
 
-  return typeof generateDailyQuests === "function"
-    ? generateDailyQuests(prefs)
-    : [];
+  const areaSet = new Set(AREAS);
+  const cleaned = remote.quests
+    .filter((q) => q && typeof q.title === "string" && areaSet.has(q.area))
+    .slice(0, 5)
+    .map((q, idx) => ({
+      id: String(q.id || `ai_${dateISO}_${idx + 1}`),
+      title: String(q.title || "")
+        .trim()
+        .slice(0, 80),
+      area: q.area,
+      done: false,
+    }));
+
+  if (cleaned.length !== 5) {
+    throw new Error(`Invalid quest count from backend: ${cleaned.length}`);
+  }
+
+  return cleaned;
 }
 
 export function AppProvider({ children }) {
@@ -225,9 +229,12 @@ export function AppProvider({ children }) {
     minute: 30,
     id: null,
   });
-
   const [weeklyGoals, setWeeklyGoals] = useState(DEFAULT_WEEKLY_GOALS);
+
   const [loading, setLoading] = useState(true);
+
+  // Sichtbarer Fehler, wenn Backend nicht erreichbar ist (damit du es merkst)
+  const [dailyQuestError, setDailyQuestError] = useState(null);
 
   // ---------- Load ----------
   useEffect(() => {
@@ -260,13 +267,19 @@ export function AppProvider({ children }) {
           setWeeklyGoals(s.weeklyGoals ?? DEFAULT_WEEKLY_GOALS);
         } else {
           const t = todayISO();
-          const initial = await fetchDailyQuestsOrFallback({
-            dateISO: t,
-            profile,
-            prefs,
-            history: {},
-          });
-          setQuests(initial);
+          try {
+            const initial = await fetchDailyQuestsStrict({
+              dateISO: t,
+              profile,
+              prefs,
+              history: {},
+            });
+            setQuests(initial);
+            setDailyQuestError(null);
+          } catch (e) {
+            setQuests([]);
+            setDailyQuestError(String(e?.message || e));
+          }
           setLastReset(t);
           setQuickQuests([]);
         }
@@ -334,15 +347,23 @@ export function AppProvider({ children }) {
         (history?.[prevDay]?.completed ?? 0) > 0 || quests.some((q) => q.done);
       setStreak((s) => (hadDone ? s + 1 : 0));
 
+      // WICHTIG: lastReset sofort setzen -> verhindert Loop/Double-Fetch
+      setLastReset(t);
+
       (async () => {
-        const next = await fetchDailyQuestsOrFallback({
-          dateISO: t,
-          profile,
-          prefs,
-          history,
-        });
-        setQuests(next);
-        setLastReset(t);
+        try {
+          const next = await fetchDailyQuestsStrict({
+            dateISO: t,
+            profile,
+            prefs,
+            history,
+          });
+          setQuests(next);
+          setDailyQuestError(null);
+        } catch (e) {
+          setQuests([]);
+          setDailyQuestError(String(e?.message || e));
+        }
       })();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -409,8 +430,6 @@ export function AppProvider({ children }) {
       setQuests((prev) => prev.filter((x) => x.id !== id));
       return;
     }
-
-    // Optionales Lernsignal fürs Modell, auch wenn du keine difficulty im UI hast
     if (action === "like") {
       setPrefs((p) => ({
         ...p,
@@ -701,6 +720,7 @@ export function AppProvider({ children }) {
     monthDays,
     yearDates,
     note,
+    difficulty,
   }) {
     setRecurring((p) => [
       ...p,
@@ -710,6 +730,7 @@ export function AppProvider({ children }) {
         kind,
         times,
         area,
+        difficulty,
         weekDays,
         monthDays,
         yearDates,
@@ -928,20 +949,29 @@ export function AppProvider({ children }) {
       (history?.[prevDay]?.completed ?? 0) > 0 || quests.some((q) => q.done);
     setStreak((s) => (prevDay !== t ? (hadDone ? s + 1 : 0) : s));
 
-    const next = await fetchDailyQuestsOrFallback({
-      dateISO: t,
-      profile,
-      prefs,
-      history,
-    });
-
-    setQuests(next);
+    // lastReset sofort setzen
     setLastReset(t);
+
+    try {
+      const next = await fetchDailyQuestsStrict({
+        dateISO: t,
+        profile,
+        prefs,
+        history,
+      });
+      setQuests(next);
+      setDailyQuestError(null);
+    } catch (e) {
+      setQuests([]);
+      setDailyQuestError(String(e?.message || e));
+    }
   }
 
   const value = useMemo(
     () => ({
       loading,
+      dailyQuestError, // <-- neu: damit du Fehler im UI anzeigen kannst
+
       profile,
       areas,
       quests,
@@ -1003,6 +1033,7 @@ export function AppProvider({ children }) {
     }),
     [
       loading,
+      dailyQuestError,
       profile,
       areas,
       quests,
