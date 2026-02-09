@@ -1,42 +1,66 @@
 // src/lib/ai.js
-// NUR tägliche Quests (keine Routinen, keine Anti-Gewohnheiten)
+// Fallback-Quests, falls Backend/KI nicht erreichbar ist.
 
-const AREAS = ["Body", "Mind", "Social", "Productivity", "Wellbeing"];
-const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
+export const AREAS = ["Body", "Mind", "Social", "Productivity", "Wellbeing"];
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
-export function generateDailyQuests(prefs = {}) {
-  const diff = (a) => clamp(prefs?.areaDifficulty?.[a] ?? 2, 1, 3);
-
+export function generateDailyQuestsFallback() {
   const P = {
-    Body: ["20 Min. Laufen", "25 Liegestütze", "10 Min. Dehnen", "3L Wasser trinken", "8.000 Schritte"],
-    Mind: ["20 Min. Mathe", "10 Seiten lesen", "Vokabeln 15 Min.", "1 Übungsaufgabe", "Notizen zusammenfassen"],
-    Social: ["Schreibe einer Person", "Kurzer Call mit Freund", "3 Komplimente", "Neue Person ansprechen", "Familie anrufen"],
-    Productivity: ["Arbeitsplatz 10 Min.", "Top-3 To-Dos definieren", "E-Mails 15 Min.", "30 Min. Deep Work", "Kalender für morgen"],
-    Wellbeing: ["10 Min. Meditation", "Abendspaziergang", "Digital Detox 30 Min.", "Schlafroutine planen", "5 Min. Atemübung"],
+    Body: [
+      "15 Min. Spazieren",
+      "10 Min. Dehnen",
+      "20 Kniebeugen",
+      "2L Wasser heute",
+    ],
+    Mind: [
+      "15 Min. Lernen",
+      "10 Seiten lesen",
+      "5 Min. Notizen ordnen",
+      "1 Übungsaufgabe lösen",
+    ],
+    Social: [
+      "Schreibe einer Person",
+      "Kurzer Call",
+      "Jemandem danken",
+      "Familie kurz fragen wie’s geht",
+    ],
+    Productivity: [
+      "Top-3 To-Dos",
+      "10 Min. Aufräumen",
+      "15 Min. Fokus",
+      "Kalender für morgen checken",
+    ],
+    Wellbeing: [
+      "5 Min. Atemübung",
+      "10 Min. Offline",
+      "Kurz Tagebuch",
+      "Schlafroutine heute planen",
+    ],
   };
 
+  const pick = (a) => a[Math.floor(Math.random() * a.length)];
+  const shuffle = (a) => [...a].sort(() => Math.random() - 0.5);
+
+  const areas = shuffle(AREAS);
   const out = [];
-  const order = [...AREAS].sort(() => Math.random() - 0.5);
 
   for (let i = 0; i < 4; i++) {
-    const a = order[i % AREAS.length];
-    out.push(q(`base_${i}`, pick(P[a]), a, diff(a)));
+    const area = areas[i % areas.length];
+    out.push({
+      id: `q_fallback_${todayISO()}_${i}_${Math.random().toString(16).slice(2, 8)}`,
+      title: pick(P[area]),
+      area,
+      done: false,
+    });
   }
 
-  const bA = pick(AREAS);
-  out.push(q("bonus", pick(P[bA]), bA, diff(bA)));
-
-  if (new Date().getDay() === 0) {
-    out.unshift(q("weeklyplan", "Nächste Woche planen (15–20 Min.)", "Productivity", 2));
-  }
+  const bonusArea = pick(AREAS);
+  out.push({
+    id: `q_fallback_${todayISO()}_bonus_${Math.random().toString(16).slice(2, 8)}`,
+    title: pick(P[bonusArea]),
+    area: bonusArea,
+    done: false,
+  });
 
   return out;
-}
-
-function q(seed, title, area, difficulty) {
-  return { id: `q_${seed}_${todayISO()}`, title, area, difficulty, done: false };
-}
-function pick(a) {
-  return a[Math.floor(Math.random() * a.length)];
 }

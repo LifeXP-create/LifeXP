@@ -1,19 +1,19 @@
 // src/screens/QuestsScreen.js
-import React, { useMemo, useState } from "react";
+import { Ionicons } from "@expo/vector-icons";
+import DateTimePicker from "@react-native-community/datetimepicker";
+import { useMemo, useState } from "react";
 import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
   FlatList,
   Modal,
-  Pressable,
   Platform,
+  Pressable,
+  StyleSheet,
+  Text,
   TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
-import DateTimePicker from "@react-native-community/datetimepicker";
-import { Ionicons } from "@expo/vector-icons";
-import { useApp, requiredXPForLevel } from "../context/AppState";
+import { requiredXPForLevel, useApp } from "../context/AppState";
 import { theme } from "../theme";
 
 const LIFE_GREEN = "#22c55e";
@@ -59,7 +59,8 @@ function formatDE(dateISO) {
 }
 
 function freqLabelFromDueKind(dueKind) {
-  if (dueKind === "badhabit" || dueKind === "bad_habit") return "Verzicht · Heute";
+  if (dueKind === "badhabit" || dueKind === "bad_habit")
+    return "Verzicht · Heute";
   if (dueKind === "weekly_fixed") return "Fix · Woche";
   if (dueKind === "weekly_quota") return "Woche";
   if (dueKind === "monthly_fixed") return "Fix · Monat";
@@ -85,13 +86,18 @@ function progressLabel(item) {
 
   if (item?._dueKind === "daily") return "Heute";
   if (item?._dueKind?.includes("_fixed")) return "Heute";
-  if (item?._dueKind === "badhabit" || item?._dueKind === "bad_habit") return "Heute";
+  if (item?._dueKind === "badhabit" || item?._dueKind === "bad_habit")
+    return "Heute";
   return "";
 }
 
 function Chip({ active, onPress, children }) {
   return (
-    <TouchableOpacity onPress={onPress} style={[s.chip, active && s.chipA]} activeOpacity={0.85}>
+    <TouchableOpacity
+      onPress={onPress}
+      style={[s.chip, active && s.chipA]}
+      activeOpacity={0.85}
+    >
       <Text style={[s.chipT, active && s.chipTA]}>{children}</Text>
     </TouchableOpacity>
   );
@@ -151,7 +157,7 @@ export default function QuestsScreen() {
   const progress = Math.min(1, xp / req);
   const xpLabel = useMemo(() => `${xp}/${req} XP`, [xp, req]);
 
-  // ✅ Filter-Regel:
+  // Filter-Regel:
   // - Manuell erstellte Erinnerungen (fromEvent !== true) => IMMER anzeigen
   // - Kalender-Erinnerungen (fromEvent === true) => NUR heute + morgen
   const filteredQuickQuests = useMemo(() => {
@@ -162,7 +168,7 @@ export default function QuestsScreen() {
       if (q?.fromEvent) {
         return q?.dueDateISO === todayLocal || q?.dueDateISO === tomorrowLocal;
       }
-      return true; // manuell: datum egal
+      return true;
     });
   }, [quickQuests]);
 
@@ -170,7 +176,6 @@ export default function QuestsScreen() {
     const t = qqText.trim();
     if (!t) return;
 
-    // ✅ manuell (datum kann gesetzt sein, aber ist fürs Anzeigen egal)
     addQuickQuest(t, "Erinnerung", qqDueDateISO, "manual");
 
     setQqText("");
@@ -210,11 +215,11 @@ export default function QuestsScreen() {
       title: q.title,
       kind,
       area: q.area || "Productivity",
-      difficulty: q.difficulty ?? 2,
       times: kind === "daily" ? 1 : timesNum,
     };
 
-    if (kind === "weekly" && adoptWeekDays.length) payload.weekDays = adoptWeekDays;
+    if (kind === "weekly" && adoptWeekDays.length)
+      payload.weekDays = adoptWeekDays;
 
     addRecurring(payload);
     setAdoptOpen(false);
@@ -238,8 +243,16 @@ export default function QuestsScreen() {
         </View>
 
         <View style={s.cardRight}>
-          <TouchableOpacity style={s.checkBtn} onPress={() => !done && completeQuest(item.id)} activeOpacity={0.8}>
-            {done ? <Ionicons name="checkmark" size={18} color={LIFE_GREEN} /> : <View style={s.circleOpen} />}
+          <TouchableOpacity
+            style={s.checkBtn}
+            onPress={() => !done && completeQuest(item.id)}
+            activeOpacity={0.8}
+          >
+            {done ? (
+              <Ionicons name="checkmark" size={18} color={LIFE_GREEN} />
+            ) : (
+              <View style={s.circleOpen} />
+            )}
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -259,7 +272,6 @@ export default function QuestsScreen() {
     const urgent = !!item?.dueDateISO && item.dueDateISO === todayLocal;
 
     const stripe = urgent ? BAD_RED : AREA_COLOR[item.area] || INFO_BLUE;
-
     const subLine = `${item.area || "Erinnerung"}${item.dueDateISO ? ` | ${formatDE(item.dueDateISO)}` : ""}`;
 
     return (
@@ -276,7 +288,11 @@ export default function QuestsScreen() {
         </View>
 
         <View style={s.cardRight}>
-          <TouchableOpacity style={s.checkBtn} onPress={() => completeQuickQuest(item.id)} activeOpacity={0.8}>
+          <TouchableOpacity
+            style={s.checkBtn}
+            onPress={() => completeQuickQuest(item.id)}
+            activeOpacity={0.8}
+          >
             <View style={[s.circleOpen, urgent && s.circleUrgent]} />
           </TouchableOpacity>
 
@@ -294,7 +310,8 @@ export default function QuestsScreen() {
 
   const renderRecurringItem = ({ item }) => {
     const area = item?._area || item?.area || "Productivity";
-    const isBadHabit = item?._dueKind === "badhabit" || item?._dueKind === "bad_habit";
+    const isBadHabit =
+      item?._dueKind === "badhabit" || item?._dueKind === "bad_habit";
 
     const stripe = isBadHabit ? BAD_AMBER : AREA_COLOR[area] || LIFE_GREEN;
 
@@ -303,7 +320,9 @@ export default function QuestsScreen() {
     const metaRight = prog ? `${freq} · ${prog}` : `${freq}`;
     const subLine = `${area} · ${metaRight}`;
 
-    const cleanTitle = isBadHabit ? normalizeBadHabitTitle(item.title) : item.title;
+    const cleanTitle = isBadHabit
+      ? normalizeBadHabitTitle(item.title)
+      : item.title;
     const shownTitle = isBadHabit ? `Don't do: ${cleanTitle}` : cleanTitle;
 
     return (
@@ -323,11 +342,19 @@ export default function QuestsScreen() {
         <View style={s.cardRight}>
           <TouchableOpacity
             style={s.checkBtn}
-            onPress={() => (isBadHabit ? completeBadHabitForToday(item.id) : completeRecurringForToday(item.id))}
+            onPress={() =>
+              isBadHabit
+                ? completeBadHabitForToday(item.id)
+                : completeRecurringForToday(item.id)
+            }
             activeOpacity={0.8}
           >
             {isBadHabit ? (
-              <Ionicons name="shield-checkmark-outline" size={20} color={BAD_AMBER} />
+              <Ionicons
+                name="shield-checkmark-outline"
+                size={20}
+                color={BAD_AMBER}
+              />
             ) : (
               <View style={s.circleOpen} />
             )}
@@ -335,7 +362,13 @@ export default function QuestsScreen() {
 
           <TouchableOpacity
             style={s.menuBtn}
-            onPress={() => setSelected({ id: item.id, type: "recurring", dueKind: item?._dueKind })}
+            onPress={() =>
+              setSelected({
+                id: item.id,
+                type: "recurring",
+                dueKind: item?._dueKind,
+              })
+            }
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
             <Ionicons name="ellipsis-horizontal" size={18} color={theme.sub} />
@@ -361,7 +394,9 @@ export default function QuestsScreen() {
         </View>
 
         <View style={s.barOuter}>
-          <View style={[s.barInner, { width: `${Math.round(progress * 100)}%` }]} />
+          <View
+            style={[s.barInner, { width: `${Math.round(progress * 100)}%` }]}
+          />
         </View>
       </View>
 
@@ -384,30 +419,49 @@ export default function QuestsScreen() {
         </View>
 
         <TouchableOpacity
-          style={[s.quickIcon, qqDueDateISO && { backgroundColor: "rgba(56,189,248,0.18)" }]}
+          style={[
+            s.quickIcon,
+            qqDueDateISO && { backgroundColor: "rgba(56,189,248,0.18)" },
+          ]}
           onPress={() => {
-            const base = qqDueDateISO ? new Date(`${qqDueDateISO}T00:00:00`) : new Date();
+            const base = qqDueDateISO
+              ? new Date(`${qqDueDateISO}T00:00:00`)
+              : new Date();
             setTempDate(base);
             setShowDatePicker(true);
           }}
           activeOpacity={0.85}
         >
-          <Ionicons name="calendar-outline" size={20} color={qqDueDateISO ? INFO_BLUE : theme.text} />
+          <Ionicons
+            name="calendar-outline"
+            size={20}
+            color={qqDueDateISO ? INFO_BLUE : theme.text}
+          />
         </TouchableOpacity>
 
         {qqDueDateISO ? (
-          <TouchableOpacity style={s.quickIcon} onPress={() => setQqDueDateISO(null)} activeOpacity={0.85}>
+          <TouchableOpacity
+            style={s.quickIcon}
+            onPress={() => setQqDueDateISO(null)}
+            activeOpacity={0.85}
+          >
             <Ionicons name="close-outline" size={22} color={theme.sub} />
           </TouchableOpacity>
         ) : null}
 
-        <TouchableOpacity style={s.quickPlus} onPress={submitQuickQuest} activeOpacity={0.85}>
+        <TouchableOpacity
+          style={s.quickPlus}
+          onPress={submitQuickQuest}
+          activeOpacity={0.85}
+        >
           <Ionicons name="add" size={22} color="#001014" />
         </TouchableOpacity>
       </View>
 
       {qqDueDateISO ? (
-        <Text style={s.deadlineHint}>Gewähltes Datum: {formatDE(qqDueDateISO)}</Text>
+        <Text style={s.deadlineHint}>
+          Gewähltes Datum: {formatDE(qqDueDateISO)}
+        </Text>
       ) : (
         <Text style={s.deadlineHint}>Kein Datum gesetzt</Text>
       )}
@@ -454,7 +508,12 @@ export default function QuestsScreen() {
         contentContainerStyle={{ paddingBottom: 24 }}
       />
 
-      <Modal visible={showDatePicker} transparent animationType="fade" onRequestClose={() => setShowDatePicker(false)}>
+      <Modal
+        visible={showDatePicker}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowDatePicker(false)}
+      >
         <Pressable style={s.overlay} onPress={() => setShowDatePicker(false)}>
           <Pressable style={s.pickerSheet} onPress={() => {}}>
             <Text style={s.sheetTitle}>Datum wählen</Text>
@@ -474,7 +533,10 @@ export default function QuestsScreen() {
 
             <View style={s.pickerActions}>
               <TouchableOpacity
-                style={[s.pickerBtn, { backgroundColor: "rgba(255,255,255,0.06)" }]}
+                style={[
+                  s.pickerBtn,
+                  { backgroundColor: "rgba(255,255,255,0.06)" },
+                ]}
                 onPress={() => setShowDatePicker(false)}
               >
                 <Text style={s.pickerBtnTextSub}>Abbrechen</Text>
@@ -494,7 +556,12 @@ export default function QuestsScreen() {
         </Pressable>
       </Modal>
 
-      <Modal visible={!!selected} transparent animationType="fade" onRequestClose={closeFeedback}>
+      <Modal
+        visible={!!selected}
+        transparent
+        animationType="fade"
+        onRequestClose={closeFeedback}
+      >
         <Pressable style={s.overlay} onPress={closeFeedback}>
           <Pressable style={s.sheet} onPress={() => {}}>
             <Text style={s.sheetTitle}>Feedback</Text>
@@ -509,7 +576,11 @@ export default function QuestsScreen() {
                     openAdoptFromDailyQuest(id);
                   }}
                 >
-                  <Ionicons name="repeat-outline" size={18} color={LIFE_GREEN} />
+                  <Ionicons
+                    name="repeat-outline"
+                    size={18}
+                    color={LIFE_GREEN}
+                  />
                   <Text style={s.sheetText}>Als Routine übernehmen</Text>
                 </TouchableOpacity>
 
@@ -520,7 +591,11 @@ export default function QuestsScreen() {
                     closeFeedback();
                   }}
                 >
-                  <Ionicons name="thumbs-up-outline" size={18} color={LIFE_GREEN} />
+                  <Ionicons
+                    name="thumbs-up-outline"
+                    size={18}
+                    color={LIFE_GREEN}
+                  />
                   <Text style={s.sheetText}>Hat mir gefallen</Text>
                 </TouchableOpacity>
 
@@ -531,7 +606,11 @@ export default function QuestsScreen() {
                     closeFeedback();
                   }}
                 >
-                  <Ionicons name="heart-dislike-outline" size={18} color={LIFE_GREEN} />
+                  <Ionicons
+                    name="heart-dislike-outline"
+                    size={18}
+                    color={LIFE_GREEN}
+                  />
                   <Text style={s.sheetText}>War zu schwer</Text>
                 </TouchableOpacity>
 
@@ -542,7 +621,11 @@ export default function QuestsScreen() {
                     closeFeedback();
                   }}
                 >
-                  <Ionicons name="eye-off-outline" size={18} color={LIFE_GREEN} />
+                  <Ionicons
+                    name="eye-off-outline"
+                    size={18}
+                    color={LIFE_GREEN}
+                  />
                   <Text style={s.sheetText}>Irrelevant</Text>
                 </TouchableOpacity>
 
@@ -572,7 +655,9 @@ export default function QuestsScreen() {
               <TouchableOpacity
                 style={s.sheetRow}
                 onPress={() => {
-                  const isBad = selected?.dueKind === "badhabit" || selected?.dueKind === "bad_habit";
+                  const isBad =
+                    selected?.dueKind === "badhabit" ||
+                    selected?.dueKind === "bad_habit";
                   if (isBad) removeBadHabit(selected.id);
                   else removeRecurring(selected.id);
                   closeFeedback();
@@ -580,7 +665,8 @@ export default function QuestsScreen() {
               >
                 <Ionicons name="trash-outline" size={18} color={BAD_RED} />
                 <Text style={s.sheetText}>
-                  {selected?.dueKind === "badhabit" || selected?.dueKind === "bad_habit"
+                  {selected?.dueKind === "badhabit" ||
+                  selected?.dueKind === "bad_habit"
                     ? "Anti-Gewohnheit löschen"
                     : "Routine löschen"}
                 </Text>
@@ -594,23 +680,40 @@ export default function QuestsScreen() {
         </Pressable>
       </Modal>
 
-      <Modal visible={adoptOpen} transparent animationType="fade" onRequestClose={() => setAdoptOpen(false)}>
+      <Modal
+        visible={adoptOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setAdoptOpen(false)}
+      >
         <Pressable style={s.overlay} onPress={() => setAdoptOpen(false)}>
           <Pressable style={s.sheet} onPress={() => {}}>
             <Text style={s.sheetTitle}>Routine übernehmen</Text>
 
             <Text style={s.label}>Typ</Text>
             <View style={s.row}>
-              <Chip active={adoptKind === "daily"} onPress={() => setAdoptKind("daily")}>
+              <Chip
+                active={adoptKind === "daily"}
+                onPress={() => setAdoptKind("daily")}
+              >
                 Daily
               </Chip>
-              <Chip active={adoptKind === "weekly"} onPress={() => setAdoptKind("weekly")}>
+              <Chip
+                active={adoptKind === "weekly"}
+                onPress={() => setAdoptKind("weekly")}
+              >
                 Weekly
               </Chip>
-              <Chip active={adoptKind === "monthly"} onPress={() => setAdoptKind("monthly")}>
+              <Chip
+                active={adoptKind === "monthly"}
+                onPress={() => setAdoptKind("monthly")}
+              >
                 Monthly
               </Chip>
-              <Chip active={adoptKind === "yearly"} onPress={() => setAdoptKind("yearly")}>
+              <Chip
+                active={adoptKind === "yearly"}
+                onPress={() => setAdoptKind("yearly")}
+              >
                 Yearly
               </Chip>
             </View>
@@ -635,38 +738,47 @@ export default function QuestsScreen() {
               <>
                 <Text style={s.label}>Fixe Wochentage (optional)</Text>
                 <View style={s.row}>
-                  {["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"].map((lbl, idx) => {
-                    const active = adoptWeekDays.includes(idx);
-                    return (
-                      <Chip
-                        key={idx}
-                        active={active}
-                        onPress={() => {
-                          const set = new Set(adoptWeekDays);
-                          set.has(idx) ? set.delete(idx) : set.add(idx);
-                          setAdoptWeekDays([...set].sort((a, b) => a - b));
-                        }}
-                      >
-                        {lbl}
-                      </Chip>
-                    );
-                  })}
+                  {["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"].map(
+                    (lbl, idx) => {
+                      const active = adoptWeekDays.includes(idx);
+                      return (
+                        <Chip
+                          key={idx}
+                          active={active}
+                          onPress={() => {
+                            const set = new Set(adoptWeekDays);
+                            set.has(idx) ? set.delete(idx) : set.add(idx);
+                            setAdoptWeekDays([...set].sort((a, b) => a - b));
+                          }}
+                        >
+                          {lbl}
+                        </Chip>
+                      );
+                    },
+                  )}
                 </View>
                 <Text style={[s.label, { marginTop: 6 }]}>
-                  Wenn du keine Tage wählst: Weekly-Quota (erscheint jeden Tag bis erfüllt).
+                  Wenn du keine Tage wählst: Weekly-Quota (erscheint jeden Tag
+                  bis erfüllt).
                 </Text>
               </>
             ) : null}
 
             <View style={{ flexDirection: "row", gap: 10, marginTop: 14 }}>
               <TouchableOpacity
-                style={[s.pickerBtn, { backgroundColor: "rgba(255,255,255,0.06)" }]}
+                style={[
+                  s.pickerBtn,
+                  { backgroundColor: "rgba(255,255,255,0.06)" },
+                ]}
                 onPress={() => setAdoptOpen(false)}
               >
                 <Text style={s.pickerBtnTextSub}>Abbrechen</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity style={[s.pickerBtn, { backgroundColor: LIFE_GREEN }]} onPress={confirmAdopt}>
+              <TouchableOpacity
+                style={[s.pickerBtn, { backgroundColor: LIFE_GREEN }]}
+                onPress={confirmAdopt}
+              >
                 <Text style={s.pickerBtnText}>Übernehmen</Text>
               </TouchableOpacity>
             </View>
@@ -834,7 +946,12 @@ const s = StyleSheet.create({
   stripe: { width: 4, height: 44, borderRadius: 999, marginRight: 14 },
 
   cardLeft: { flex: 1, paddingRight: 12 },
-  title: { color: theme.text, fontSize: 20, fontWeight: "900", letterSpacing: -0.2 },
+  title: {
+    color: theme.text,
+    fontSize: 20,
+    fontWeight: "900",
+    letterSpacing: -0.2,
+  },
   titleDone: { textDecorationLine: "line-through" },
 
   sub: { color: theme.sub, marginTop: 6, fontWeight: "800", fontSize: 16 },
@@ -842,12 +959,34 @@ const s = StyleSheet.create({
 
   cardRight: { flexDirection: "row", alignItems: "center", gap: 14 },
 
-  checkBtn: { width: 40, height: 40, borderRadius: 999, alignItems: "center", justifyContent: "center" },
-  circleOpen: { width: 22, height: 22, borderRadius: 999, borderWidth: 2, borderColor: "rgba(255,255,255,0.25)" },
+  checkBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  circleOpen: {
+    width: 22,
+    height: 22,
+    borderRadius: 999,
+    borderWidth: 2,
+    borderColor: "rgba(255,255,255,0.25)",
+  },
 
-  menuBtn: { width: 36, height: 36, borderRadius: 999, alignItems: "center", justifyContent: "center" },
+  menuBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+  },
 
-  overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.55)", justifyContent: "flex-end" },
+  overlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    justifyContent: "flex-end",
+  },
 
   sheet: {
     backgroundColor: theme.card,
@@ -891,8 +1030,18 @@ const s = StyleSheet.create({
   pickerBtnText: { color: "#001014", fontWeight: "900" },
   pickerBtnTextSub: { color: theme.sub, fontWeight: "900" },
 
-  sheetTitle: { color: theme.text, fontSize: 18, fontWeight: "900", marginBottom: 10 },
-  sheetRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 12 },
+  sheetTitle: {
+    color: theme.text,
+    fontSize: 18,
+    fontWeight: "900",
+    marginBottom: 10,
+  },
+  sheetRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 12,
+  },
   sheetText: { color: theme.text, fontSize: 15, fontWeight: "800" },
 
   cancelBtn: {

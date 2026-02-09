@@ -375,7 +375,7 @@ export default function SettingsScreen({ navigation }) {
           <View style={styles.inputRow}>
             <TextInput
               style={[styles.input, styles.inputFlex]}
-              placeholder="z. B. Eishockey, Mathe, Beziehungen …"
+              placeholder="z. B. Fussball, Mathe, Beziehungen …"
               placeholderTextColor="#9ca3af"
               value={interestInput}
               onChangeText={setInterestInput}
