@@ -13,6 +13,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import QuestDetailModal from "../components/QuestDetailModal";
 import { requiredXPForLevel, useApp } from "../context/AppState";
 import { theme } from "../theme";
 
@@ -131,9 +132,18 @@ export default function QuestsScreen() {
     completeQuest,
     rateQuest,
 
+    requestQuestHelp, // <-- NEU
+
     profile,
     streak,
   } = app;
+
+  // Modal: Quest öffnen
+  const [openQuestId, setOpenQuestId] = useState(null);
+  const openedQuest = useMemo(
+    () => (quests || []).find((q) => q.id === openQuestId) || null,
+    [quests, openQuestId],
+  );
 
   const [selected, setSelected] = useState(null);
 
@@ -225,12 +235,20 @@ export default function QuestsScreen() {
     setAdoptOpen(false);
   };
 
+  // --- RENDER: Daily ---
   const renderDailyItem = ({ item }) => {
     const done = !!item.done;
     const stripe = AREA_COLOR[item.area] || LIFE_GREEN;
 
     return (
-      <View style={[s.card, done && s.cardDone]}>
+      <Pressable
+        onPress={() => setOpenQuestId(item.id)}
+        style={({ pressed }) => [
+          s.card,
+          done && s.cardDone,
+          pressed && { opacity: 0.9 },
+        ]}
+      >
         <View style={[s.stripe, { backgroundColor: stripe }]} />
 
         <View style={s.cardLeft}>
@@ -263,10 +281,11 @@ export default function QuestsScreen() {
             <Ionicons name="ellipsis-horizontal" size={18} color={theme.sub} />
           </TouchableOpacity>
         </View>
-      </View>
+      </Pressable>
     );
   };
 
+  // --- RENDER: Quick ---
   const renderQuickItem = ({ item }) => {
     const todayLocal = toLocalISODate(new Date());
     const urgent = !!item?.dueDateISO && item.dueDateISO === todayLocal;
@@ -308,6 +327,7 @@ export default function QuestsScreen() {
     );
   };
 
+  // --- RENDER: Recurring ---
   const renderRecurringItem = ({ item }) => {
     const area = item?._area || item?.area || "Productivity";
     const isBadHabit =
@@ -508,6 +528,25 @@ export default function QuestsScreen() {
         contentContainerStyle={{ paddingBottom: 24 }}
       />
 
+      {/* Quest Detail Modal (NEU) */}
+      <QuestDetailModal
+        visible={!!openQuestId}
+        quest={openedQuest}
+        onClose={() => setOpenQuestId(null)}
+        onMarkDone={() =>
+          openedQuest && !openedQuest.done && completeQuest(openedQuest.id)
+        }
+        onMore={() => {
+          if (!openedQuest) return;
+          setSelected({ id: openedQuest.id, type: "daily" });
+        }}
+        onAskHelp={(action) => {
+          if (!openedQuest) return;
+          requestQuestHelp?.(openedQuest.id, action);
+        }}
+      />
+
+      {/* Date picker (bestehend) */}
       <Modal
         visible={showDatePicker}
         transparent
@@ -556,6 +595,7 @@ export default function QuestsScreen() {
         </Pressable>
       </Modal>
 
+      {/* Feedback modal (bestehend) */}
       <Modal
         visible={!!selected}
         transparent
@@ -680,6 +720,7 @@ export default function QuestsScreen() {
         </Pressable>
       </Modal>
 
+      {/* Adopt modal (bestehend) */}
       <Modal
         visible={adoptOpen}
         transparent
@@ -1015,11 +1056,7 @@ const s = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.06)",
     backgroundColor: "rgba(0,0,0,0.20)",
   },
-  pickerActions: {
-    flexDirection: "row",
-    gap: 10,
-    marginTop: 12,
-  },
+  pickerActions: { flexDirection: "row", gap: 10, marginTop: 12 },
   pickerBtn: {
     flex: 1,
     paddingVertical: 12,

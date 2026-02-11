@@ -1,12 +1,7 @@
 // src/context/AppState.js
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { fetchDailyQuests } from "../lib/dailyQuestClient";
+import { fetchQuestHelp } from "../lib/questHelpClient"; // ✅ NEU
 import { getStorage } from "../storage/typesafeStorage";
 
 export const AREAS = ["Body", "Mind", "Social", "Productivity", "Wellbeing"];
@@ -449,6 +444,91 @@ export function AppProvider({ children }) {
         },
       }));
       return;
+    }
+  }
+
+  // ✅ NEU: Quest Help (KI-Text/Steps/Easier/Harder) wird direkt am Quest gespeichert
+  async function requestQuestHelp(questId, action) {
+    const allowed = new Set(["explain", "steps", "easier", "harder"]);
+    if (!allowed.has(action)) return;
+
+    const q = quests.find((x) => x.id === questId);
+    if (!q) return;
+
+    // loading flag setzen
+    setQuests((prev) =>
+      prev.map((x) =>
+        x.id === questId
+          ? {
+              ...x,
+              ai: {
+                ...(x.ai || {}),
+                loading: { ...((x.ai || {}).loading || {}), [action]: true },
+                error: { ...((x.ai || {}).error || {}), [action]: null },
+              },
+            }
+          : x,
+      ),
+    );
+
+    try {
+      const out = await fetchQuestHelp({
+        action,
+        quest: { title: q.title, area: q.area },
+        profile: {
+          name: profile?.name || "Player",
+          age: profile?.age ?? null,
+          goals: Array.isArray(profile?.goals) ? profile.goals : [],
+          interests: Array.isArray(profile?.interests) ? profile.interests : [],
+          personality: Array.isArray(profile?.personality)
+            ? profile.personality
+            : [],
+          others: Array.isArray(profile?.others) ? profile.others : [],
+        },
+      });
+
+      setQuests((prev) =>
+        prev.map((x) => {
+          if (x.id !== questId) return x;
+
+          const ai0 = x.ai || {};
+          const help0 = ai0.help || {};
+
+          return {
+            ...x,
+            ai: {
+              ...ai0,
+              help: {
+                ...help0,
+                [action]:
+                  action === "steps"
+                    ? { text: out?.text || "", steps: out?.steps || [] }
+                    : { text: out?.text || "" },
+              },
+              loading: { ...(ai0.loading || {}), [action]: false },
+              error: { ...(ai0.error || {}), [action]: null },
+            },
+          };
+        }),
+      );
+    } catch (e) {
+      setQuests((prev) =>
+        prev.map((x) =>
+          x.id === questId
+            ? {
+                ...x,
+                ai: {
+                  ...(x.ai || {}),
+                  loading: { ...((x.ai || {}).loading || {}), [action]: false },
+                  error: {
+                    ...((x.ai || {}).error || {}),
+                    [action]: String(e?.message || e),
+                  },
+                },
+              }
+            : x,
+        ),
+      );
     }
   }
 
@@ -970,7 +1050,7 @@ export function AppProvider({ children }) {
   const value = useMemo(
     () => ({
       loading,
-      dailyQuestError, // <-- neu: damit du Fehler im UI anzeigen kannst
+      dailyQuestError,
 
       profile,
       areas,
@@ -1000,6 +1080,8 @@ export function AppProvider({ children }) {
       addXP,
       completeQuest,
       rateQuest,
+
+      requestQuestHelp, // ✅ NEU
 
       addQuickQuest,
       updateQuickQuest,
