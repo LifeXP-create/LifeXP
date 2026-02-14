@@ -1,13 +1,22 @@
-import { getOrCreateUserId } from "../lib/userId";
+// src/storage/typesafeStorage.js
+import { supabase } from "../lib/supabase";
 import { createLocalAsyncDriver } from "./drivers/localAsync";
 import { createStorage } from "./index";
 
-let _storage = null;
+async function getAuthedUserId() {
+  const {
+    data: { session },
+    error,
+  } = await supabase.auth.getSession();
+
+  if (error) throw error;
+  const uid = session?.user?.id ? String(session.user.id) : null;
+  if (!uid) throw new Error("Not authenticated");
+  return uid;
+}
 
 export async function getStorage() {
-  if (_storage) return _storage;
-  const userId = await getOrCreateUserId();
-  const driver = createLocalAsyncDriver({ userId });
-  _storage = createStorage(driver);
-  return _storage;
+  const userId = await getAuthedUserId();
+  const driver = createLocalAsyncDriver(userId);
+  return createStorage(driver);
 }

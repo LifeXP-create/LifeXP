@@ -17,7 +17,7 @@ import {
   TouchableWithoutFeedback,
   View,
 } from "react-native";
-import { getOrCreateUserId } from "../lib/userId";
+import { supabase } from "../lib/supabase";
 
 const STORAGE_KEY_BASE = "profile_v2";
 const storageKeyForUser = (userId) => `${STORAGE_KEY_BASE}:${userId}`;
@@ -79,7 +79,21 @@ const parseHHMM = (str) => {
   return { hour: h, minute: min };
 };
 
+async function getAuthedUserIdOrThrow() {
+  const {
+    data: { session },
+    error,
+  } = await supabase.auth.getSession();
+
+  if (error) throw error;
+  const uid = session?.user?.id ? String(session.user.id) : null;
+  if (!uid) throw new Error("Not authenticated");
+  return uid;
+}
+
 export default function SettingsScreen({ navigation }) {
+  const [authedUserId, setAuthedUserId] = useState(null);
+
   /** Profil */
   const [name, setName] = useState("");
   const [age, setAge] = useState("");
@@ -111,8 +125,10 @@ export default function SettingsScreen({ navigation }) {
   useEffect(() => {
     (async () => {
       try {
-        const userId = await getOrCreateUserId();
-        const raw = await AsyncStorage.getItem(storageKeyForUser(userId));
+        const uid = await getAuthedUserIdOrThrow();
+        setAuthedUserId(uid);
+
+        const raw = await AsyncStorage.getItem(storageKeyForUser(uid));
         if (!raw) return;
 
         const p = JSON.parse(raw);
@@ -128,11 +144,12 @@ export default function SettingsScreen({ navigation }) {
           setNotifEnabled(p.notifEnabled);
         if (Array.isArray(p.notifTimes) && p.notifTimes.length)
           setTimes(p.notifTimes);
-      } catch {
-        // ignore corrupted save
+      } catch (e) {
+        // nicht eingeloggt -> zurück zum login
+        navigation?.navigate?.("login");
       }
     })();
-  }, []);
+  }, [navigation]);
 
   /** add/remove tags */
   const addTag = (value, list, setList, setInput) => {
@@ -210,7 +227,7 @@ export default function SettingsScreen({ navigation }) {
           hour: t.hour,
           minute: t.minute,
           repeats: true,
-          channelId: Platform.OS === "android" ? "lifexp-daily" : undefined,
+          channelId: Platform.OS === "android" ? "lifexp-reminders" : undefined,
         },
       });
     }
@@ -218,6 +235,11 @@ export default function SettingsScreen({ navigation }) {
 
   /** speichern */
   const save = async () => {
+    if (!authedUserId) {
+      navigation?.navigate?.("login");
+      return;
+    }
+
     if (notifEnabled) {
       const ok = await ensureNotifPermission();
       if (!ok) {
@@ -242,9 +264,8 @@ export default function SettingsScreen({ navigation }) {
       updatedAt: Date.now(),
     };
 
-    const userId = await getOrCreateUserId();
     await AsyncStorage.setItem(
-      storageKeyForUser(userId),
+      storageKeyForUser(authedUserId),
       JSON.stringify(profile),
     );
     navigation?.goBack?.();
@@ -259,6 +280,11 @@ export default function SettingsScreen({ navigation }) {
       </TouchableOpacity>
     </View>
   );
+
+  // Wenn Session noch nicht geladen ist: nichts rendern (kein Crash)
+  if (!authedUserId) {
+    return <View style={{ flex: 1, backgroundColor: "#0b0b0b" }} />;
+  }
 
   return (
     <KeyboardAvoidingView
