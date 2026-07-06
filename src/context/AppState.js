@@ -236,6 +236,12 @@ export function AppProvider({ children }) {
     (async () => {
       try {
         const store = await getStorage();
+
+        // ✅ NEU: wenn nicht eingeloggt → nicht crashen, einfach nichts laden
+        if (!store) {
+          return;
+        }
+
         const s = await store.getAppState();
 
         if (s) {
@@ -291,6 +297,10 @@ export function AppProvider({ children }) {
 
     (async () => {
       const store = await getStorage();
+
+      // ✅ NEU: wenn nicht eingeloggt → nicht speichern
+      if (!store) return;
+
       await store.upsertAppState({
         profile,
         areas,

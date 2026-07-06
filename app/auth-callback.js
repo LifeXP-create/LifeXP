@@ -1,26 +1,23 @@
 // app/auth-callback.js
 import * as Linking from "expo-linking";
-import { Redirect } from "expo-router";
+import { useRouter } from "expo-router";
 import { useEffect } from "react";
+import { ActivityIndicator, View } from "react-native";
 import { supabase } from "../src/lib/supabase";
+import { theme } from "../src/theme";
 
-/**
- * Handles:
- * - Magic link / OAuth (access_token + refresh_token in URL hash/query)
- * - Email confirm (token_hash + type in query)
- *
- * If it's only an email-confirm without session tokens, we just redirect to /auth
- * (user then logs in normally).
- */
 export default function AuthCallback() {
+  const router = useRouter();
+
   useEffect(() => {
     let sub;
 
     const handleUrl = async (url) => {
-      if (!url) return;
+      if (!url) {
+        router.replace("/auth");
+        return;
+      }
 
-      // Expo / Supabase sometimes puts tokens in the hash (#...)
-      // Example: myapp://auth-callback#access_token=...&refresh_token=...
       const [base, hash] = url.split("#");
       const queryPart = base.includes("?") ? base.split("?")[1] : "";
       const hashPart = hash || "";
@@ -33,22 +30,39 @@ export default function AuthCallback() {
       const refresh_token =
         hashParams.get("refresh_token") || params.get("refresh_token");
 
-      // 1) If we got session tokens -> set session
-      if (access_token && refresh_token) {
-        await supabase.auth.setSession({ access_token, refresh_token });
-        return;
-      }
-
-      // 2) Email confirm links can come as token_hash + type
       const token_hash = params.get("token_hash");
-      const type = params.get("type"); // "signup" etc.
+      const type = params.get("type") || hashParams.get("type");
 
-      if (token_hash && type) {
-        try {
-          await supabase.auth.verifyOtp({ type, token_hash });
-        } catch {
-          // If verify fails, user can still just log in manually.
+      try {
+        // Fall 1: Session-Tokens direkt im Link
+        if (access_token && refresh_token) {
+          await supabase.auth.setSession({ access_token, refresh_token });
+
+          if (type === "recovery") {
+            router.replace("/reset-password");
+            return;
+          }
+
+          router.replace("/auth");
+          return;
         }
+
+        // Fall 2: token_hash + type (z.B. recovery oder signup)
+        if (token_hash && type) {
+          await supabase.auth.verifyOtp({ type, token_hash });
+
+          if (type === "recovery") {
+            router.replace("/reset-password");
+            return;
+          }
+
+          router.replace("/auth");
+          return;
+        }
+
+        router.replace("/auth");
+      } catch {
+        router.replace("/auth");
       }
     };
 
@@ -62,8 +76,18 @@ export default function AuthCallback() {
     });
 
     return () => sub?.remove?.();
-  }, []);
+  }, [router]);
 
-  // After handling we always go to auth; the gate will send logged-in users to /quests
-  return <Redirect href="/auth" />;
+  return (
+    <View
+      style={{
+        flex: 1,
+        backgroundColor: theme.bg,
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      <ActivityIndicator size="large" color="#22c55e" />
+    </View>
+  );
 }

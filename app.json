@@ -2,7 +2,13 @@
   "expo": {
     "name": "LifeXP",
     "slug": "lifexp",
-    "plugins": ["expo-router"]
+    "scheme": "lifexp",
+    "plugins": ["expo-router"],
+    "ios": {
+      "bundleIdentifier": "com.lifexp.app"
+    },
+    "android": {
+      "package": "com.lifexp.app"
+    }
   }
 }
-

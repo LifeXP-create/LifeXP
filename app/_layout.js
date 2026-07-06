@@ -1,17 +1,14 @@
 // app/_layout.js
 import { Ionicons } from "@expo/vector-icons";
-import { Redirect, Tabs, usePathname } from "expo-router";
-import { useEffect, useState } from "react";
-import { GestureHandlerRootView } from "react-native-gesture-handler";
-import { AppProvider } from "../src/context/AppState";
-import { theme } from "../src/theme";
-
 import * as Notifications from "expo-notifications";
+import { Redirect, Stack, Tabs, useSegments } from "expo-router";
+import { useEffect, useState } from "react";
 import { Platform } from "react-native";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 
-// Supabase Auth Provider
-import { SessionContextProvider } from "@supabase/auth-helpers-react";
+import { AppProvider } from "../src/context/AppState";
 import { supabase } from "../src/lib/supabase";
+import { theme } from "../src/theme";
 
 function TabIcon({ name, color, focused }) {
   return (
@@ -20,9 +17,9 @@ function TabIcon({ name, color, focused }) {
 }
 
 export default function Layout() {
-  const pathname = usePathname();
+  const segments = useSegments();
+  const [session, setSession] = useState(null);
   const [booting, setBooting] = useState(true);
-  const [hasSession, setHasSession] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -35,45 +32,67 @@ export default function Layout() {
     })();
   }, []);
 
-  // Session check + live updates
   useEffect(() => {
-    let sub;
-    (async () => {
-      const { data } = await supabase.auth.getSession();
-      setHasSession(!!data?.session);
-      setBooting(false);
+    let mounted = true;
 
-      sub = supabase.auth.onAuthStateChange((_event, session) => {
-        setHasSession(!!session);
-      });
+    (async () => {
+      const { data, error } = await supabase.auth.getSession();
+      if (!mounted) return;
+      setSession(error ? null : (data?.session ?? null));
+      setBooting(false);
     })();
 
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => {
+      setSession(s ?? null);
+    });
+
     return () => {
-      sub?.data?.subscription?.unsubscribe?.();
+      mounted = false;
+      sub?.subscription?.unsubscribe?.();
     };
   }, []);
 
-  // Allow auth routes without being logged in
-  const isAuthRoute =
-    pathname === "/auth" ||
-    pathname === "/auth-callback" ||
-    pathname === "/onboarding" ||
-    pathname === "/index";
+  // auth, auth-callback und reset-password gehören nicht in die normale App-Navigation
+  const seg0 = segments?.[0];
+  const onAuthRoute =
+    seg0 === "auth" || seg0 === "auth-callback" || seg0 === "reset-password";
+
+  if (booting) return null;
+
+  // ---- ROUTING GUARD ----
+  if (!session && !onAuthRoute) return <Redirect href="/auth" />;
+  if (session && seg0 === "auth") return <Redirect href="/quests" />;
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <SessionContextProvider supabaseClient={supabase}>
-        <AppProvider>
-          {!booting && !hasSession && !isAuthRoute ? (
-            <Redirect href="/auth" />
-          ) : null}
+      <AppProvider>
+        {!session ? (
+          <Stack
+            screenOptions={{
+              headerStyle: { backgroundColor: theme.bg },
+              headerTitleStyle: { color: theme.text, fontWeight: "700" },
+              headerTintColor: theme.text,
+            }}
+          >
+            <Stack.Screen
+              name="auth"
+              options={{ title: "auth", headerShown: false }}
+            />
 
-          {!booting &&
-          hasSession &&
-          (pathname === "/auth" || pathname === "/index") ? (
-            <Redirect href="/quests" />
-          ) : null}
+            <Stack.Screen
+              name="auth-callback"
+              options={{ title: "auth-callback", headerShown: false }}
+            />
 
+            <Stack.Screen
+              name="reset-password"
+              options={{ title: "Neues Passwort", headerShown: false }}
+            />
+
+            <Stack.Screen name="index" options={{ headerShown: false }} />
+            <Stack.Screen name="onboarding" options={{ headerShown: false }} />
+          </Stack>
+        ) : (
           <Tabs
             screenOptions={{
               headerStyle: { backgroundColor: theme.bg },
@@ -132,14 +151,15 @@ export default function Layout() {
               }}
             />
 
-            {/* Hidden routes */}
-            <Tabs.Screen name="index" options={{ href: null }} />
-            <Tabs.Screen name="onboarding" options={{ href: null }} />
+            {/* versteckte Routen */}
             <Tabs.Screen name="auth" options={{ href: null }} />
             <Tabs.Screen name="auth-callback" options={{ href: null }} />
+            <Tabs.Screen name="reset-password" options={{ href: null }} />
+            <Tabs.Screen name="index" options={{ href: null }} />
+            <Tabs.Screen name="onboarding" options={{ href: null }} />
           </Tabs>
-        </AppProvider>
-      </SessionContextProvider>
+        )}
+      </AppProvider>
     </GestureHandlerRootView>
   );
 }
